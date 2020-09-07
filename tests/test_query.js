@@ -7,14 +7,11 @@ const nock = require('..')
 const got = require('./got_client')
 const assertRejects = require('assert-rejects')
 
-require('./cleanup_after_each')()
 require('./setup')
 
 describe('query params in path', () => {
   it('matches that query string', async () => {
-    const scope = nock('http://example.test')
-      .get('/foo?bar=baz')
-      .reply()
+    const scope = nock('http://example.test').get('/foo?bar=baz').reply()
 
     const { statusCode } = await got('http://example.test/foo?bar=baz')
 
@@ -81,9 +78,7 @@ describe('`query()`', () => {
         .query({ num: 1, bool: true, empty: null, str: 'fou' })
         .reply(200, 'scope1')
 
-      const scope2 = nock('http://example.test')
-        .get('/')
-        .reply(200, 'scope2')
+      const scope2 = nock('http://example.test').get('/').reply(200, 'scope2')
 
       const { statusCode, body } = await got('http://example.test/')
 
@@ -130,7 +125,7 @@ describe('`query()`', () => {
         .reply()
 
       const { statusCode } = await got('http://example.test/', {
-        query: { 'foo&bar': 'hello&world' },
+        searchParams: { 'foo&bar': 'hello&world' },
       })
 
       expect(statusCode).to.equal(200)
@@ -145,8 +140,7 @@ describe('`query()`', () => {
 
       await assertRejects(
         got('http://example.test/?foo=hello%20world'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
 
       const { statusCode } = await got(
@@ -179,43 +173,31 @@ describe('`query()`', () => {
     })
 
     it('will not match when a query string does not match name=value', async () => {
-      nock('http://example.test')
-        .get('/')
-        .query({ foo: 'bar' })
-        .reply()
+      nock('http://example.test').get('/').query({ foo: 'bar' }).reply()
 
       await assertRejects(
         got('http://example.test/?foo=baz'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
     })
 
     it('will not match when a query string is present that was not registered', async () => {
-      nock('http://example.test')
-        .get('/')
-        .query({ foo: 'bar' })
-        .reply()
+      nock('http://example.test').get('/').query({ foo: 'bar' }).reply()
 
       await assertRejects(
         got('http://example.test/?foo=bar&baz=foz'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
     })
 
     it('will not match when a query string is malformed', async () => {
       // This is a valid query string so it's not really malformed, just not
       // matching. Should this test be removed?
-      nock('http://example.test')
-        .get('/')
-        .query({ foo: 'bar' })
-        .reply()
+      nock('http://example.test').get('/').query({ foo: 'bar' }).reply()
 
       await assertRejects(
         got('http://example.test/?foobar'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
     })
 
@@ -232,21 +214,16 @@ describe('`query()`', () => {
 
       await assertRejects(
         got('http://example.test/?num=1str=fou'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
     })
 
     it('query matching should not consider request arrays equal to comma-separated expectations', async () => {
-      nock('http://example.test')
-        .get('/')
-        .query({ foo: 'bar,baz' })
-        .reply()
+      nock('http://example.test').get('/').query({ foo: 'bar,baz' }).reply()
 
       await assertRejects(
         got('http://example.test?foo[]=bar&foo[]=baz'),
-        got.RequestError,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
     })
 
@@ -258,8 +235,7 @@ describe('`query()`', () => {
 
       await assertRejects(
         got('http://example.test?foo=bar%2Cbaz'),
-        got.RequestError,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
     })
   })
@@ -268,10 +244,7 @@ describe('`query()`', () => {
     it('matches', async () => {
       const params = new url.URLSearchParams({ foo: 'bar' })
 
-      const scope = nock('http://example.test')
-        .get('/')
-        .query(params)
-        .reply()
+      const scope = nock('http://example.test').get('/').query(params).reply()
 
       const { statusCode } = await got('http://example.test?foo=bar')
 
@@ -292,10 +265,7 @@ describe('`query()`', () => {
 
   describe('when called with `true`', () => {
     it('will allow all query strings to pass', async () => {
-      const scope = nock('http://example.test')
-        .get('/')
-        .query(true)
-        .reply()
+      const scope = nock('http://example.test').get('/').query(true).reply()
 
       const { statusCode } = await got('http://example.test/?foo=hello%20world')
       expect(statusCode).to.equal(200)
@@ -303,10 +273,7 @@ describe('`query()`', () => {
     })
 
     it('will match when the path has no query', async () => {
-      const scope = nock('http://example.test')
-        .get('/')
-        .query(true)
-        .reply()
+      const scope = nock('http://example.test').get('/').query(true).reply()
 
       const { statusCode } = await got('http://example.test/')
       expect(statusCode).to.equal(200)
@@ -317,10 +284,7 @@ describe('`query()`', () => {
   describe('when called with a function', () => {
     it('function called with actual queryObject', async () => {
       const queryFn = sinon.stub().returns(true)
-      const scope = nock('http://example.test')
-        .get('/')
-        .query(queryFn)
-        .reply()
+      const scope = nock('http://example.test').get('/').query(queryFn).reply()
 
       const { statusCode } = await got('http://example.test/?foo=bar&a=1&b=2')
       expect(statusCode).to.equal(200)
@@ -355,8 +319,7 @@ describe('`query()`', () => {
 
       await assertRejects(
         got('http://example.test/?i=should&pass=?'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
     })
   })

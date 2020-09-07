@@ -21,7 +21,9 @@ describe('asynchronous `reply()` function', () => {
           callback(null, 'Hello World!')
         )
 
-      const { body } = await got('http://example.test/', { encoding: null })
+      const { body } = await got('http://example.test/', {
+        responseType: 'buffer',
+      })
 
       expect(body).to.be.an.instanceOf(Buffer)
       expect(body.toString('utf8')).to.equal('Hello World!')
@@ -53,6 +55,36 @@ describe('asynchronous `reply()` function', () => {
       scope.done()
     })
 
+    it('should get request headers', async () => {
+      const scope = nock('http://example.test')
+        .get('/yo')
+        .reply(201, function (path, reqBody, cb) {
+          expect(this.req.path).to.equal('/yo')
+          expect(this.req.headers).to.deep.equal({
+            'accept-encoding': 'gzip, deflate, br',
+            host: 'example.test',
+            'x-my-header': 'some-value',
+            'x-my-other-header': 'some-other-value',
+            'user-agent': 'got (https://github.com/sindresorhus/got)',
+          })
+          setTimeout(function () {
+            cb(null, 'foobar')
+          }, 1e3)
+        })
+
+      const { statusCode, body } = await got('http://example.test/yo', {
+        headers: {
+          'x-my-header': 'some-value',
+          'x-my-other-header': 'some-other-value',
+        },
+      })
+
+      expect(statusCode).to.equal(201)
+      expect(body).to.equal('foobar')
+
+      scope.done()
+    })
+
     it('reply should throw on error on the callback', async () => {
       nock('http://example.test')
         .get('/')
@@ -60,11 +92,7 @@ describe('asynchronous `reply()` function', () => {
           callback(new Error('Database failed'))
         )
 
-      await assertRejects(
-        got('http://example.test'),
-        got.RequestError,
-        'Database failed'
-      )
+      await assertRejects(got('http://example.test'), /Database failed/)
     })
 
     it('an error passed to the callback propagates when [err, fullResponseArray] is expected', async () => {
@@ -74,7 +102,7 @@ describe('asynchronous `reply()` function', () => {
           callback(Error('boom'))
         })
 
-      await assertRejects(got('http://example.test'), got.RequestError, 'boom')
+      await assertRejects(got('http://example.test'), /boom/)
     })
 
     it('subsequent calls to the reply callback are ignored', async () => {
@@ -137,11 +165,7 @@ describe('asynchronous `reply()` function', () => {
           throw Error('oh no!')
         })
 
-      await assertRejects(
-        got('http://example.test'),
-        got.RequestError,
-        'oh no!'
-      )
+      await assertRejects(got('http://example.test'), /oh no!/)
     })
 
     it('when reply is called with an async function that throws, it propagates the error', async () => {
@@ -151,11 +175,7 @@ describe('asynchronous `reply()` function', () => {
           throw Error('oh no!')
         })
 
-      await assertRejects(
-        got('http://example.test'),
-        got.RequestError,
-        'oh no!'
-      )
+      await assertRejects(got('http://example.test'), /oh no!/)
     })
   })
 })

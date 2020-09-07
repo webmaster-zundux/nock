@@ -12,12 +12,12 @@ const got = require('./got_client')
 
 require('./setup')
 
-const textFile = path.join(__dirname, '..', 'assets', 'reply_file_1.txt')
+const textFilePath = path.resolve(__dirname, './assets/reply_file_1.txt')
 
 it('reply with file and pipe response', done => {
   const scope = nock('http://example.test')
     .get('/')
-    .replyWithFile(200, textFile)
+    .replyWithFile(200, textFilePath)
 
   let text = ''
   const fakeStream = new stream.Stream()
@@ -43,35 +43,29 @@ it('pause response after data', done => {
     // multiple 'data' events.
     .reply(200, response)
 
-  http.get(
-    {
-      host: 'example.test',
-      path: '/',
-    },
-    res => {
-      const didTimeout = sinon.spy()
+  http.get('http://example.test', res => {
+    const didTimeout = sinon.spy()
 
-      setTimeout(() => {
-        didTimeout()
-        res.resume()
-      }, 500)
+    setTimeout(() => {
+      didTimeout()
+      res.resume()
+    }, 500)
 
-      res.on('data', data => res.pause())
+    res.on('data', () => res.pause())
 
-      res.on('end', () => {
-        expect(didTimeout).to.have.been.calledOnce()
-        scope.done()
-        done()
-      })
-    }
-  )
+    res.on('end', () => {
+      expect(didTimeout).to.have.been.calledOnce()
+      scope.done()
+      done()
+    })
 
-  // Manually simulate multiple 'data' events.
-  response.emit('data', 'one')
-  setTimeout(() => {
-    response.emit('data', 'two')
-    response.end()
-  }, 0)
+    // Manually simulate multiple 'data' events.
+    response.emit('data', 'one')
+    setTimeout(() => {
+      response.emit('data', 'two')
+      response.end()
+    }, 0)
+  })
 })
 
 // https://github.com/nock/nock/issues/1493
@@ -83,30 +77,22 @@ it("response has 'complete' property and it's true after end", done => {
     // multiple 'data' events.
     .reply(200, response)
 
-  http.get(
-    {
-      host: 'example.test',
-      path: '/',
-    },
-    res => {
-      const onData = sinon.spy()
+  http.get('http://example.test', res => {
+    const onData = sinon.spy()
 
-      res.on('data', onData)
+    res.on('data', onData)
 
-      res.on('end', () => {
-        expect(onData).to.have.been.called()
-        expect(res.complete).to.be.true()
-        scope.done()
-        done()
-      })
-    }
-  )
+    res.on('end', () => {
+      expect(onData).to.have.been.called()
+      expect(res.complete).to.be.true()
+      scope.done()
+      done()
+    })
 
-  // Manually simulate multiple 'data' events.
-  response.emit('data', 'one')
-  setTimeout(() => {
+    // Manually simulate multiple 'data' events.
+    response.emit('data', 'one')
     response.end()
-  }, 0)
+  })
 })
 
 // TODO Convert to async / got.
@@ -121,11 +107,11 @@ it('response pipe', done => {
 
     util.inherits(Constructor, events.EventEmitter)
 
-    Constructor.prototype.end = function() {
+    Constructor.prototype.end = function () {
       this.emit('end')
     }
 
-    Constructor.prototype.write = function(chunk) {
+    Constructor.prototype.write = function (chunk) {
       const buf = Buffer.alloc(this.buffer.length + chunk.length)
 
       this.buffer.copy(buf)
@@ -139,9 +125,7 @@ it('response pipe', done => {
     return new Constructor()
   })()
 
-  const scope = nock('http://example.test')
-    .get('/')
-    .reply(200, 'nobody')
+  const scope = nock('http://example.test').get('/').reply(200, 'nobody')
 
   http.get(
     {
@@ -177,11 +161,11 @@ it('response pipe without implicit end', done => {
 
     util.inherits(Constructor, events.EventEmitter)
 
-    Constructor.prototype.end = function() {
+    Constructor.prototype.end = function () {
       this.emit('end')
     }
 
-    Constructor.prototype.write = function(chunk) {
+    Constructor.prototype.write = function (chunk) {
       const buf = Buffer.alloc(this.buffer.length + chunk.length)
 
       this.buffer.copy(buf)
@@ -195,9 +179,7 @@ it('response pipe without implicit end', done => {
     return new Constructor()
   })()
 
-  const scope = nock('http://example.test')
-    .get('/')
-    .reply(200, 'nobody')
+  const scope = nock('http://example.test').get('/').reply(200, 'nobody')
 
   http.get(
     {
@@ -212,19 +194,14 @@ it('response pipe without implicit end', done => {
         done()
       })
 
-      res.pipe(
-        dest,
-        { end: false }
-      )
+      res.pipe(dest, { end: false })
     }
   )
 })
 
 it('response is streams2 compatible', done => {
   const responseText = 'streams2 streams2 streams2'
-  nock('http://example.test')
-    .get('/somepath')
-    .reply(200, responseText)
+  nock('http://example.test').get('/somepath').reply(200, responseText)
 
   http
     .request(
@@ -232,17 +209,17 @@ it('response is streams2 compatible', done => {
         host: 'example.test',
         path: '/somepath',
       },
-      function(res) {
+      function (res) {
         res.setEncoding('utf8')
 
         let body = ''
 
-        res.on('readable', function() {
+        res.on('readable', function () {
           let buf
           while ((buf = res.read())) body += buf
         })
 
-        res.once('end', function() {
+        res.once('end', function () {
           expect(body).to.equal(responseText)
           done()
         })
@@ -274,11 +251,11 @@ it('when a stream is used for the response body, it will not be read until after
     let body = ''
     expect(res.statusCode).to.equal(201)
 
-    res.on('data', function(chunk) {
+    res.on('data', function (chunk) {
       body += chunk
     })
 
-    res.once('end', function() {
+    res.once('end', function () {
       expect(body).to.equal(responseText)
       done()
     })
@@ -301,7 +278,7 @@ it('response readable pull stream works as expected', done => {
       let ended = false
       let responseBody = ''
       expect(res.statusCode).to.equal(200)
-      res.on('readable', function() {
+      res.on('readable', function () {
         let chunk
         while ((chunk = res.read()) !== null) {
           responseBody += chunk.toString()
@@ -323,9 +300,7 @@ it('error events on reply streams proxy to the response', done => {
   // of built in error handling and this test would get convoluted.
 
   const replyBody = new stream.PassThrough()
-  const scope = nock('http://example.test')
-    .get('/')
-    .reply(201, replyBody)
+  const scope = nock('http://example.test').get('/').reply(201, replyBody)
 
   http.get(
     {
@@ -336,14 +311,13 @@ it('error events on reply streams proxy to the response', done => {
     res => {
       res.on('error', err => {
         expect(err).to.equal('oh no!')
+        scope.done()
         done()
+      })
+
+      replyBody.end(() => {
+        replyBody.emit('error', 'oh no!')
       })
     }
   )
-
-  scope.done()
-
-  replyBody.end(() => {
-    replyBody.emit('error', 'oh no!')
-  })
 })

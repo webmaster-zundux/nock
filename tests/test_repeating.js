@@ -19,8 +19,7 @@ describe('repeating', () => {
 
     await assertRejects(
       got('http://example.test/'),
-      Error,
-      'Nock: No match for request'
+      /Nock: No match for request/
     )
 
     scope.done()
@@ -40,8 +39,7 @@ describe('repeating', () => {
 
     await assertRejects(
       got('http://example.test/'),
-      Error,
-      'Nock: No match for request'
+      /Nock: No match for request/
     )
 
     scope.done()
@@ -61,8 +59,7 @@ describe('repeating', () => {
 
     await assertRejects(
       got('http://example.test/'),
-      Error,
-      'Nock: No match for request'
+      /Nock: No match for request/
     )
 
     scope.done()
@@ -83,8 +80,7 @@ describe('repeating', () => {
 
       await assertRejects(
         got('http://example.test/'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
 
       scope.done()
@@ -101,8 +97,7 @@ describe('repeating', () => {
 
       await assertRejects(
         got('http://example.test/'),
-        Error,
-        'Nock: No match for request'
+        /Nock: No match for request/
       )
 
       scope.done()
@@ -110,10 +105,7 @@ describe('repeating', () => {
   })
 
   it('`isDone()` considers repeated responses', async () => {
-    const scope = nock('http://example.test')
-      .get('/')
-      .times(2)
-      .reply(204)
+    const scope = nock('http://example.test').get('/').times(2).reply(204)
 
     // eslint-disable-next-line no-unused-vars
     for (const _ of Array(2)) {

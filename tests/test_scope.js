@@ -4,6 +4,7 @@ const path = require('path')
 const { expect } = require('chai')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').preserveCache()
+const url = require('url')
 const Interceptor = require('../lib/interceptor')
 const nock = require('..')
 const got = require('./got_client')
@@ -11,7 +12,9 @@ const got = require('./got_client')
 require('./setup')
 
 it('scope exposes interceptors', () => {
-  const scopes = nock.load(path.join(__dirname, 'fixtures', 'goodRequest.json'))
+  const scopes = nock.load(
+    path.join(__dirname, 'fixtures', 'good_request.json')
+  )
 
   expect(scopes).to.be.an.instanceOf(Array)
   expect(scopes).to.have.lengthOf.at.least(1)
@@ -24,11 +27,33 @@ it('scope exposes interceptors', () => {
   })
 })
 
+describe('`Scope#constructor`', () => {
+  it('accepts the output of url.parse', async () => {
+    const scope = nock(url.parse('http://example.test')).get('/').reply()
+
+    const { statusCode } = await got('http://example.test')
+    expect(statusCode).to.equal(200)
+    scope.done()
+  })
+
+  it.skip('accepts a WHATWG URL instance', async () => {
+    const scope = nock(new url.URL('http://example.test')).get('/').reply()
+
+    const { statusCode } = await got('http://example.test')
+    expect(statusCode).to.equal(200)
+    scope.done()
+  })
+
+  it('fails when provided a WHATWG URL instance', () => {
+    // This test just proves the lack of current support. When this feature is added,
+    // this test should be removed and the test above un-skipped.
+    expect(() => nock(new url.URL('http://example.test'))).to.throw()
+  })
+})
+
 describe('`Scope#remove()`', () => {
   it('removes an active mock', () => {
-    const scope = nock('http://example.test')
-      .get('/')
-      .reply(200)
+    const scope = nock('http://example.test').get('/').reply(200)
     const key = 'GET http://example.test:80/'
 
     // Confidence check.
@@ -42,10 +67,7 @@ describe('`Scope#remove()`', () => {
   })
 
   it('when a mock is persisted, does nothing', () => {
-    const scope = nock('http://example.test')
-      .persist()
-      .get('/')
-      .reply(200)
+    const scope = nock('http://example.test').persist().get('/').reply(200)
     const key = 'GET http://example.test:80/'
 
     // Confidence check.
@@ -59,9 +81,7 @@ describe('`Scope#remove()`', () => {
   })
 
   it('when the key is nonexistent, does nothing', () => {
-    const scope = nock('http://example.test')
-      .get('/')
-      .reply(200)
+    const scope = nock('http://example.test').get('/').reply(200)
     const key = 'GET http://example.test:80/'
 
     // Confidence check.
@@ -81,15 +101,29 @@ it('loadDefs throws expected when fs is not available', () => {
   expect(() => loadDefs()).to.throw(Error, 'No fs')
 })
 
-describe('filteringPath()', function() {
-  it('filter path with function', async function() {
+describe('`Scope#isDone()`', () => {
+  it('returns false while a mock is pending, and true after it is consumed', async () => {
+    const scope = nock('http://example.test').get('/').reply()
+
+    expect(scope.isDone()).to.be.false()
+
+    await got('http://example.test/')
+
+    expect(scope.isDone()).to.be.true()
+
+    scope.done()
+  })
+})
+
+describe('`filteringPath()`', function () {
+  it('filter path with function', async function () {
     const scope = nock('http://example.test')
       .filteringPath(() => '/?a=2&b=1')
       .get('/?a=2&b=1')
       .reply()
 
     const { statusCode } = await got('http://example.test/', {
-      query: { a: '1', b: '2' },
+      searchParams: { a: '1', b: '2' },
     })
 
     expect(statusCode).to.equal(200)
@@ -103,7 +137,7 @@ describe('filteringPath()', function() {
       .reply()
 
     const { statusCode } = await got('http://example.test/', {
-      query: { a: '1', b: '2' },
+      searchParams: { a: '1', b: '2' },
     })
 
     expect(statusCode).to.equal(200)
@@ -131,7 +165,7 @@ describe('filteringRequestBody()', () => {
       .post('/', 'mamma tua')
       .reply()
 
-    const { statusCode } = await got('http://example.test/', {
+    const { statusCode } = await got.post('http://example.test/', {
       body: 'mamma mia',
     })
 
@@ -146,7 +180,7 @@ describe('filteringRequestBody()', () => {
       .post('/', 'mamma nostra')
       .reply(200, 'Hello World!')
 
-    const { statusCode } = await got('http://example.test/', {
+    const { statusCode } = await got.post('http://example.test/', {
       body: 'mamma mia',
     })
 

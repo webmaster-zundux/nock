@@ -1,9 +1,11 @@
 'use strict'
 
 const { expect } = require('chai')
+const http = require('http')
 const nock = require('..')
+
 const got = require('./got_client')
-const ssl = require('./ssl')
+const httpsServer = require('./servers')
 
 require('./setup')
 
@@ -17,28 +19,32 @@ describe('NOCK_OFF env var', () => {
     process.env.NOCK_OFF = original
   })
 
-  let server
-  afterEach(() => {
-    if (server) {
-      server.close()
-      server = undefined
-    }
-  })
-
   it('when true, https mocks reach the live server', async () => {
     const responseBody = 'the real thing'
-    server = await ssl.startServer((request, response) => {
-      response.writeHead(200)
-      response.end(responseBody)
-    })
+    const { origin } = await httpsServer.startHttpsServer(
+      (request, response) => {
+        response.writeHead(200)
+        response.end(responseBody)
+      }
+    )
 
-    const { port } = server.address()
-    const scope = nock(`https://localhost:${port}`, { allowUnmocked: true })
+    const scope = nock(origin, { allowUnmocked: true })
       .get('/')
       .reply(200, 'mock')
 
-    const { body } = await got(`https://localhost:${port}`, { ca: ssl.ca })
+    const { body } = await got(origin, { ca: httpsServer.ca })
     expect(body).to.equal(responseBody)
     scope.done()
+  })
+
+  it('when true before import, Nock does not activate', async () => {
+    nock.restore()
+    const originalClient = http.ClientRequest
+
+    delete require.cache[require.resolve('..')]
+    const newNock = require('..')
+
+    expect(http.ClientRequest).to.equal(originalClient)
+    expect(newNock.isActive()).to.equal(false)
   })
 })

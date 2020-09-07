@@ -1,14 +1,14 @@
 'use strict'
 
-const { test } = require('tap')
+const { expect } = require('chai')
 const assertRejects = require('assert-rejects')
 const nock = require('..')
 const got = require('./got_client')
 
-require('./cleanup_after_each')()
+require('./setup')
 
-test('basic auth with username and password', async t => {
-  t.beforeEach(done => {
+describe('basic auth with username and password', () => {
+  beforeEach(done => {
     nock('http://example.test')
       .get('/test')
       .basicAuth({ user: 'foo', pass: 'bar' })
@@ -16,25 +16,25 @@ test('basic auth with username and password', async t => {
     done()
   })
 
-  await t.test('succeeds when it matches', async tt => {
+  it('succeeds when it matches', async () => {
     const response = await got('http://example.test/test', {
-      auth: 'foo:bar',
+      username: 'foo',
+      password: 'bar',
     })
-    tt.equal(response.statusCode, 200)
-    tt.equal(response.body, 'Here is the content')
+    expect(response.statusCode).to.equal(200)
+    expect(response.body).to.equal('Here is the content')
   })
 
-  await t.test('fails when it doesnt match', async tt => {
+  it('fails when it doesnt match', async () => {
     await assertRejects(
       got('http://example.test/test'),
-      Error,
-      'Nock: No match for request'
+      /Nock: No match for request/
     )
   })
 })
 
-test('basic auth with username only', async t => {
-  t.beforeEach(done => {
+describe('basic auth with username only', () => {
+  beforeEach(done => {
     nock('http://example.test')
       .get('/test')
       .basicAuth({ user: 'foo' })
@@ -42,17 +42,19 @@ test('basic auth with username only', async t => {
     done()
   })
 
-  await t.test('succeeds when it matches', async tt => {
-    const response = await got('http://example.test/test', { auth: 'foo:' })
-    tt.equal(response.statusCode, 200)
-    tt.equal(response.body, 'Here is the content')
+  it('succeeds when it matches', async () => {
+    const response = await got('http://example.test/test', {
+      username: 'foo',
+      password: '',
+    })
+    expect(response.statusCode).to.equal(200)
+    expect(response.body).to.equal('Here is the content')
   })
 
-  await t.test('fails when it doesnt match', async tt => {
+  it('fails when it doesnt match', async () => {
     await assertRejects(
       got('http://example.test/test'),
-      Error,
-      'Nock: No match for request'
+      /Nock: No match for request/
     )
   })
 })

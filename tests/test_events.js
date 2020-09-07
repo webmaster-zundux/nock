@@ -2,21 +2,18 @@
 
 const { expect } = require('chai')
 const http = require('http')
+const path = require('path')
 const sinon = require('sinon')
-const { test } = require('tap')
 
 const nock = require('..')
 const got = require('./got_client')
 
-require('./cleanup_after_each')()
 require('./setup')
 
 function ignore() {}
 
-test('emits request and replied events when request has no body', async () => {
-  const scope = nock('http://example.test')
-    .get('/')
-    .reply()
+it('emits request and replied events when request has no body', async () => {
+  const scope = nock('http://example.test').get('/').reply()
 
   const onRequest = sinon.spy()
   const onReplied = sinon.spy()
@@ -31,25 +28,23 @@ test('emits request and replied events when request has no body', async () => {
   expect(onReplied).to.have.been.calledOnce()
 })
 
-test('emits request and request body', async () => {
+it('emits request and request body', async () => {
   const data = 'example=123'
 
-  const scope = nock('http://example.test')
-    .post('/please')
-    .reply()
+  const scope = nock('http://example.test').post('/please').reply()
 
   const onRequest = sinon.spy()
   const onReplied = sinon.spy()
 
-  scope.on('request', function(req, interceptor, body) {
+  scope.on('request', function (req, interceptor, body) {
     onRequest()
     expect(req.path).to.equal('/please')
-    expect(interceptor.interceptionCounter).to.equal(0)
+    expect(interceptor.interceptionCounter).to.equal(1)
     expect(body).to.deep.equal(data)
     expect(onReplied).to.not.have.been.called()
   })
 
-  scope.on('replied', function(req, interceptor) {
+  scope.on('replied', function (req, interceptor) {
     onReplied()
     expect(req.path).to.equal('/please')
     expect(interceptor.interceptionCounter).to.equal(1)
@@ -68,36 +63,51 @@ test('emits request and request body', async () => {
   expect(onReplied).to.have.been.calledOnce()
 })
 
-test('emits no match when no match and no mock', function(t) {
-  nock.emitter.once('no match', function() {
-    t.end()
-  })
+it('emits request and replied events when response body is a stream', async () => {
+  const textFilePath = path.resolve(__dirname, './assets/reply_file_1.txt')
+  const scope = nock('http://example.test')
+    .get('/')
+    .replyWithFile(200, textFilePath)
 
-  const req = http.get('http://example.test/abc')
-  req.once('error', ignore)
+  const onRequest = sinon.spy()
+  const onReplied = sinon.spy()
+
+  scope.on('request', onRequest)
+  scope.on('replied', onReplied)
+
+  await got('http://example.test')
+
+  scope.done()
+  expect(onRequest).to.have.been.calledOnce()
+  expect(onReplied).to.have.been.calledOnce()
 })
 
-test('emits no match when no match and mocked', function(t) {
-  nock('http://example.test')
-    .get('/')
-    .reply(418)
+it('emits no match when no match and no mock', done => {
+  nock.emitter.once('no match', () => {
+    done()
+  })
 
-  const assertion = function(req) {
+  http.get('http://example.test/abc').once('error', ignore)
+})
+
+it('emits no match when no match and mocked', done => {
+  nock('http://example.test').get('/').reply(418)
+
+  nock.emitter.on('no match', req => {
     expect(req.path).to.equal('/definitelymaybe')
-    nock.emitter.removeAllListeners('no match')
-    t.end()
-  }
-  nock.emitter.on('no match', assertion)
+    done()
+  })
 
   http.get('http://example.test/definitelymaybe').once('error', ignore)
 })
 
-test('emits no match when netConnect is disabled', function(t) {
+it('emits no match when netConnect is disabled', done => {
   nock.disableNetConnect()
-  nock.emitter.on('no match', function(req) {
+
+  nock.emitter.on('no match', req => {
     expect(req.hostname).to.equal('example.test')
-    nock.emitter.removeAllListeners('no match')
-    t.end()
+    done()
   })
+
   http.get('http://example.test').once('error', ignore)
 })

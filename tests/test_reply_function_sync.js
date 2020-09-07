@@ -21,9 +21,7 @@ describe('synchronous `reply()` function', () => {
 
       const { statusCode, body } = await got('http://example.test')
       expect(statusCode).to.equal(201)
-      expect(body)
-        .to.be.a('string')
-        .and.to.equal('OK!')
+      expect(body).to.be.a('string').and.to.equal('OK!')
       scope.done()
     })
 
@@ -49,9 +47,7 @@ describe('synchronous `reply()` function', () => {
 
       const { statusCode, body } = await got('http://example.test')
       expect(statusCode).to.equal(201)
-      expect(body)
-        .to.be.a('string')
-        .and.to.equal('123')
+      expect(body).to.be.a('string').and.to.equal('123')
       scope.done()
     })
 
@@ -62,9 +58,7 @@ describe('synchronous `reply()` function', () => {
 
       const { statusCode, body } = await got('http://example.test')
       expect(statusCode).to.equal(201)
-      expect(body)
-        .to.be.a('string')
-        .and.to.equal('[123]')
+      expect(body).to.be.a('string').and.to.equal('[123]')
       scope.done()
     })
 
@@ -75,9 +69,7 @@ describe('synchronous `reply()` function', () => {
 
       const { statusCode, body } = await got('http://example.test')
       expect(statusCode).to.equal(201)
-      expect(body)
-        .to.be.a('string')
-        .and.to.equal('false')
+      expect(body).to.be.a('string').and.to.equal('false')
       scope.done()
     })
 
@@ -88,9 +80,7 @@ describe('synchronous `reply()` function', () => {
 
       const { statusCode, body } = await got('http://example.test')
       expect(statusCode).to.equal(201)
-      expect(body)
-        .to.be.a('string')
-        .and.to.equal('null')
+      expect(body).to.be.a('string').and.to.equal('null')
       scope.done()
     })
 
@@ -124,7 +114,7 @@ describe('synchronous `reply()` function', () => {
           got.post('http://example.test/endpoint', {
             body: exampleRequestBody,
           }),
-          ({ statusCode, body }) => {
+          ({ response: { statusCode, body } }) => {
             expect(statusCode).to.equal(404)
             expect(body).to.equal(exampleResponseBody)
             return true
@@ -149,10 +139,10 @@ describe('synchronous `reply()` function', () => {
             })
 
           await assertRejects(
-            got('http://example.test/endpoint', {
+            got.post('http://example.test/endpoint', {
               body: exampleRequestBody,
             }),
-            ({ statusCode, body }) => {
+            ({ response: { statusCode, body } }) => {
               expect(statusCode).to.equal(404)
               expect(body).to.equal('')
               return true
@@ -178,7 +168,7 @@ describe('synchronous `reply()` function', () => {
                 .and.to.deep.equal(JSON.parse(exampleRequestBody))
             })
 
-          const { statusCode } = await got('http://example.test/', {
+          const { statusCode } = await got.post('http://example.test/', {
             headers: { 'Content-Type': 'application/json' },
             body: exampleRequestBody,
           })
@@ -201,7 +191,7 @@ describe('synchronous `reply()` function', () => {
                 .and.to.to.deep.equal(JSON.parse(exampleRequestBody))
             })
 
-          const { statusCode } = await got('http://example.test/', {
+          const { statusCode } = await got.post('http://example.test/', {
             // Providing the field value as an array is probably a bug on the callers behalf,
             // but it is still allowed by Node
             headers: { 'Content-Type': ['application/json', 'charset=utf8'] },
@@ -272,7 +262,7 @@ describe('synchronous `reply()` function', () => {
 
       await assertRejects(
         got('http://example.test/'),
-        ({ statusCode, body }) => {
+        ({ response: { statusCode, body } }) => {
           expect(statusCode).to.equal(401)
           expect(body).to.equal(exampleResponse)
           return true
@@ -303,9 +293,7 @@ describe('synchronous `reply()` function', () => {
       const { statusCode, body } = await got('http://example.test/')
 
       expect(statusCode).to.equal(202)
-      expect(body)
-        .to.be.a('string')
-        .and.to.to.equal('123')
+      expect(body).to.be.a('string').and.to.to.equal('123')
       scope.done()
     })
 
@@ -339,12 +327,9 @@ describe('synchronous `reply()` function', () => {
         .reply(() => 'ABC')
 
       await assertRejects(got('http://example.test/abc'), err => {
-        expect(err)
-          .to.be.an.instanceOf(Error)
-          .and.include({
-            message:
-              'A single function provided to .reply MUST return an array',
-          })
+        expect(err).to.be.an.instanceOf(Error).and.include({
+          message: 'A single function provided to .reply MUST return an array',
+        })
         return true
       })
     })
@@ -355,11 +340,9 @@ describe('synchronous `reply()` function', () => {
         .reply(() => [])
 
       await assertRejects(got('http://example.test/abc'), err => {
-        expect(err)
-          .to.be.an.instanceOf(Error)
-          .and.include({
-            message: 'Invalid undefined value for status code',
-          })
+        expect(err).to.be.an.instanceOf(Error).and.include({
+          message: 'Invalid undefined value for status code',
+        })
         return true
       })
     })
@@ -378,12 +361,10 @@ describe('synchronous `reply()` function', () => {
         ])
 
       await assertRejects(got('http://example.test/abc'), err => {
-        expect(err)
-          .to.be.an.instanceOf(Error)
-          .and.include({
-            message:
-              'The array returned from the .reply callback contains too many values',
-          })
+        expect(err).to.be.an.instanceOf(Error).and.include({
+          message:
+            'The array returned from the .reply callback contains too many values',
+        })
         return true
       })
     })

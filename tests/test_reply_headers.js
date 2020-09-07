@@ -6,7 +6,7 @@
 const { IncomingMessage } = require('http')
 const { expect } = require('chai')
 const sinon = require('sinon')
-const lolex = require('lolex')
+const fakeTimers = require('@sinonjs/fake-timers')
 const nock = require('..')
 const got = require('./got_client')
 
@@ -235,8 +235,7 @@ describe('`reply()` headers', () => {
             myHeaderFnCalled()
             expect(req).to.be.an.instanceof(OverriddenClientRequest)
             expect(res).to.be.an.instanceof(IncomingMessage)
-            expect(body).to.be.an.instanceof(Buffer)
-            expect(Buffer.from('boo!').equals(body)).to.be.true()
+            expect(body).to.equal('boo!')
             return 'gotcha'
           },
         })
@@ -340,10 +339,7 @@ describe('`replyDate()`', () => {
   it('sends explicit date header with response', async () => {
     const date = new Date()
 
-    const scope = nock('http://example.test')
-      .replyDate(date)
-      .get('/')
-      .reply()
+    const scope = nock('http://example.test').replyDate(date).get('/').reply()
 
     const { headers } = await got('http://example.test/')
 
@@ -354,7 +350,7 @@ describe('`replyDate()`', () => {
   describe('with mock timers', () => {
     let clock
     beforeEach(() => {
-      clock = lolex.install()
+      clock = fakeTimers.install()
     })
     afterEach(() => {
       if (clock) {
@@ -364,10 +360,7 @@ describe('`replyDate()`', () => {
     })
 
     it('sends date header with response', async () => {
-      const scope = nock('http://example.test')
-        .replyDate()
-        .get('/')
-        .reply()
+      const scope = nock('http://example.test').replyDate().get('/').reply()
 
       const req = got('http://example.test/')
       clock.tick()

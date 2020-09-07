@@ -21,7 +21,9 @@ declare namespace nock {
   function activeMocks(): string[]
   function removeInterceptor(interceptor: Interceptor | ReqOptions): boolean
   function disableNetConnect(): void
-  function enableNetConnect(matcher?: string | RegExp): void
+  function enableNetConnect(
+    matcher?: string | RegExp | ((host: string) => boolean)
+  ): void
   function load(path: string): Scope[]
   function loadDefs(path: string): Definition[]
   function define(defs: Definition[]): Scope[]
@@ -118,14 +120,12 @@ declare namespace nock {
     filteringRequestBody(regex: RegExp, replace: string): this
     filteringRequestBody(fn: (body: string) => string): this
 
-    log(out: (message: any, ...optionalParams: any[]) => void): this
     persist(flag?: boolean): this
     replyContentLength(): this
     replyDate(d?: Date): this
 
     done(): void
     isDone(): boolean
-    restore(): void
     pendingMocks(): string[]
     activeMocks(): string[]
   }
@@ -203,7 +203,6 @@ declare namespace nock {
     delay(opts: number | { head?: number; body?: number }): this
     delayBody(timeMs: number): this
     delayConnection(timeMs: number): this
-    socketDelay(timeMs: number): this
   }
 
   interface Options {

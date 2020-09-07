@@ -1,6 +1,6 @@
 import nock from 'nock'
 import * as fs from 'fs'
-import { URL, URLSearchParams } from 'url'
+import url, { URLSearchParams } from 'url'
 
 let scope: nock.Scope = nock('http://example.test')
 let inst: nock.Interceptor
@@ -120,7 +120,6 @@ scope = scope.filteringRequestBody((path: string) => {
   return str
 })
 
-scope = scope.log(() => {})
 scope = scope.persist()
 scope = scope.persist(false)
 scope = scope.replyContentLength()
@@ -131,11 +130,9 @@ inst = inst.delay(2000)
 inst = inst.delay({ head: 1000, body: 1000 })
 inst = inst.delayBody(2000)
 inst = inst.delayConnection(2000)
-inst = inst.socketDelay(2000)
 
 scope.done() // $ExpectType void
 scope.isDone() // $ExpectType boolean
-scope.restore() // $ExpectType void
 
 nock.recorder.rec()
 nock.recorder.rec(true)
@@ -149,17 +146,21 @@ defs = nock.recorder.play() as nock.Definition[]
 
 // Usage
 // $ExpectType Scope
-nock('http://example.test')
-  .get('/users/1')
-  .reply(200, {
-    _id: '123ABC',
-    _rev: '946B7D1C',
-    username: 'foo',
-    email: 'foo.bar@example.test',
-  })
+nock('http://example.test').get('/users/1').reply(200, {
+  _id: '123ABC',
+  _rev: '946B7D1C',
+  username: 'foo',
+  email: 'foo.bar@example.test',
+})
 
 // Using URL as input
-scope = nock(new URL('https://example.test/'))
+// Not supported yet
+// scope = nock(new URL('https://example.test/'))
+//   .get('/resource')
+//   .reply(200, 'url matched')
+
+// specifying URL from url.parse output
+scope = nock(url.parse('https://example.test/'))
   .get('/resource')
   .reply(200, 'url matched')
 
@@ -173,9 +174,7 @@ scope = nock(/example\.com/)
   .reply(200, 'domain regex matched')
 
 // Specifying path
-scope = nock('http://example.test')
-  .get('/resource')
-  .reply(200, 'path matched')
+scope = nock('http://example.test').get('/resource').reply(200, 'path matched')
 
 scope = nock('http://example.test')
   .get(/source$/)
@@ -277,25 +276,24 @@ nock('http://example.test', { encodedQueryParams: true })
 
 nock('http://example.test')
   .get('/')
-  .query(new URLSearchParams([['foo', 'one'], ['foo', 'two']]))
+  .query(
+    new URLSearchParams([
+      ['foo', 'one'],
+      ['foo', 'two'],
+    ])
+  )
   .reply()
 
 // Specifying replies
-scope = nock('http://example.test')
-  .get('/users/1')
-  .reply(404)
+scope = nock('http://example.test').get('/users/1').reply(404)
 
-scope = nock('http://example.test')
-  .get('/')
-  .reply(200, 'Hello from Google!')
+scope = nock('http://example.test').get('/').reply(200, 'Hello from Google!')
 
-scope = nock('http://example.test')
-  .get('/')
-  .reply(200, {
-    username: 'foo',
-    email: 'foo.bar@example.test',
-    _id: '4324243fsd',
-  })
+scope = nock('http://example.test').get('/').reply(200, {
+  username: 'foo',
+  email: 'foo.bar@example.test',
+  _id: '4324243fsd',
+})
 
 scope = nock('http://example.test')
   .get('/resource')
@@ -353,7 +351,7 @@ scope = nock('http://example.test')
 /// Access original request and headers
 scope = nock('http://example.test')
   .get('/cat-poems')
-  .reply(function(uri, requestBody) {
+  .reply(function (uri, requestBody) {
     str = this.req.path
     console.log('path:', this.req.path)
     console.log('headers:', this.req.headers)
@@ -413,11 +411,9 @@ scope = nock('http://example.test')
   .reply(200)
 
 /// Specifying Reply Headers
-scope = nock('http://example.test')
-  .get('/')
-  .reply(200, 'Hello World!', {
-    'X-My-Headers': 'My Header value',
-  })
+scope = nock('http://example.test').get('/').reply(200, 'Hello World!', {
+  'X-My-Headers': 'My Header value',
+})
 
 scope = nock('http://example.test')
   .get('/')
@@ -468,9 +464,7 @@ scope = nock('http://example.test')
   .reply(200, { hello: 'world' })
 
 // HTTP Verbs
-nock('http://example.test')
-  .intercept('/path', 'PATCH')
-  .reply(304)
+nock('http://example.test').intercept('/path', 'PATCH').reply(304)
 
 // Support for HTTP and HTTPS
 scope = nock('https://secure.example.test')
@@ -479,28 +473,13 @@ scope = nock('https://secure.example.test')
 scope = nock('http://example.test:8081')
 
 // Repeat response n times
-nock('http://example.test')
-  .get('/')
-  .times(4)
-  .reply(200, 'Ok')
-nock('http://example.test')
-  .get('/')
-  .once()
-  .reply(200, 'Ok')
-nock('http://example.test')
-  .get('/')
-  .twice()
-  .reply(200, 'Ok')
-nock('http://example.test')
-  .get('/')
-  .thrice()
-  .reply(200, 'Ok')
+nock('http://example.test').get('/').times(4).reply(200, 'Ok')
+nock('http://example.test').get('/').once().reply(200, 'Ok')
+nock('http://example.test').get('/').twice().reply(200, 'Ok')
+nock('http://example.test').get('/').thrice().reply(200, 'Ok')
 
 // Make responding optional
-nock('http://example.test')
-  .get('/')
-  .optionally()
-  .reply(200, 'Ok')
+nock('http://example.test').get('/').optionally().reply(200, 'Ok')
 
 // Delay the response body
 nock('http://example.test')
@@ -520,13 +499,6 @@ nock('http://example.test')
     head: 2000, // header will be delayed for 2 seconds, i.e. the whole response will be delayed for 2 seconds.
     body: 3000, // body will be delayed for another 3 seconds after header is sent out.
   })
-  .reply(200, '<html></html>')
-
-// Delay the connection
-nock('http://example.test')
-  .get('/')
-  .socketDelay(2000) // 2 seconds
-  .delayConnection(1000)
   .reply(200, '<html></html>')
 
 // Chaining
@@ -635,12 +607,10 @@ scope = nock('http://example.test')
 
 // Allow unmocked requests on a mocked hostname
 options = { allowUnmocked: true }
-scope = nock('http://example.test', options)
-  .get('/my/url')
-  .reply(200, 'OK!')
+scope = nock('http://example.test', options).get('/my/url').reply(200, 'OK!')
 
 // Expectations
-let google = nock('http://example.test')
+const google = nock('http://example.test')
   .get('/')
   .reply(200, 'Hello from Google!')
 setTimeout(() => {
@@ -648,9 +618,7 @@ setTimeout(() => {
 }, 5000)
 
 /// .isDone()
-scope = nock('http://example.test')
-  .get('/')
-  .reply(200)
+scope = nock('http://example.test').get('/').reply(200)
 scope.isDone() // will return false
 
 nock.isDone()
@@ -676,9 +644,6 @@ console.error('pending mocks: %j', nock.pendingMocks())
 nock.activeMocks() // $ExpectType string[]
 nock('http://example.test').activeMocks() // $ExpectType string[]
 
-// Logging
-google = nock('http://example.test').log(console.log)
-
 // Restoring
 nock.restore()
 
@@ -691,6 +656,9 @@ nock.enableNetConnect('example.test')
 
 // or a RegExp
 nock.enableNetConnect(/example\.(com|test)/)
+
+// or a Function
+nock.enableNetConnect(host => host.includes('example.com'))
 
 nock.disableNetConnect()
 nock.enableNetConnect('127.0.0.1') // Allow localhost connections so we can test local routes and mock servers.

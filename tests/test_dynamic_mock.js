@@ -1,72 +1,67 @@
 'use strict'
 
-const { test } = require('tap')
-const request = require('request')
+const { expect } = require('chai')
 const nock = require('..')
+const got = require('./got_client')
 
-require('./cleanup_after_each')()
+require('./setup')
 
-test('one function returning the status code and body defines a full mock', function(t) {
-  nock('http://example.test')
-    .get('/def')
-    .reply(function() {
-      return [201, 'DEF']
-    })
+// "dynamic" refers to `reply` getting a single callback argument that returns or calls the callback with an array of [status, [body, headers]]]
+describe('dynamic `reply()` function', () => {
+  it('can provide only the status code by returning an array', async () => {
+    const scope = nock('http://example.test')
+      .get('/')
+      .reply(() => [201])
 
-  request.get('http://example.test/def', function(err, resp, body) {
-    t.error(err)
-    t.equal(resp.statusCode, 201)
-    t.equal(body, 'DEF')
-    t.end()
+    const { statusCode, body } = await got('http://example.test')
+    expect(statusCode).to.equal(201)
+    expect(body).to.equal('')
+
+    scope.done()
   })
-})
 
-test('one asynchronous function returning the status code and body defines a full mock', function(t) {
-  nock('http://example.test')
-    .get('/ghi')
-    .reply(function(path, reqBody, cb) {
-      setTimeout(function() {
-        cb(null, [201, 'GHI'])
-      }, 1e3)
-    })
-
-  request.get('http://example.test/ghi', function(err, resp, body) {
-    t.error(err)
-    t.equal(resp.statusCode, 201)
-    t.equal(body, 'GHI')
-    t.end()
-  })
-})
-
-test('asynchronous function gets request headers', function(t) {
-  nock('http://example.test')
-    .get('/yo')
-    .reply(201, function(path, reqBody, cb) {
-      t.equal(this.req.path, '/yo')
-      t.deepEqual(this.req.headers, {
-        'x-my-header': 'some-value',
-        'x-my-other-header': 'some-other-value',
-        host: 'example.test',
+  it('can provide the status code and body by returning an array', async () => {
+    const scope = nock('http://example.test')
+      .get('/')
+      .reply(function () {
+        return [201, 'DEF']
       })
-      setTimeout(function() {
-        cb(null, 'foobar')
-      }, 1e3)
-    })
 
-  request(
-    {
-      method: 'GET',
-      uri: 'http://example.test/yo',
-      headers: {
-        'x-my-header': 'some-value',
-        'x-my-other-header': 'some-other-value',
-      },
-    },
-    function(err, resp, body) {
-      t.error(err)
-      t.equal(resp.statusCode, 201)
-      t.equal(body, 'foobar')
-      t.end()
-    }
-  )
+    const { statusCode, body } = await got('http://example.test')
+    expect(statusCode).to.equal(201)
+    expect(body).to.equal('DEF')
+
+    scope.done()
+  })
+
+  it('can provide the status code, body, and headers by returning an array', async () => {
+    const scope = nock('http://example.test')
+      .get('/')
+      .reply(function () {
+        return [201, 'DEF', { 'X-Foo': 'bar' }]
+      })
+
+    const { statusCode, body, headers } = await got('http://example.test')
+    expect(statusCode).to.equal(201)
+    expect(body).to.equal('DEF')
+    expect(headers).to.deep.equal({ 'x-foo': 'bar' })
+
+    scope.done()
+  })
+
+  it('should provide the status code and body by passing them to the asynchronous callback', async () => {
+    const scope = nock('http://example.test')
+      .get('/')
+      .reply(function (path, reqBody, cb) {
+        setTimeout(function () {
+          cb(null, [201, 'GHI'])
+        }, 1e3)
+      })
+
+    const { statusCode, body } = await got('http://example.test')
+    expect(statusCode).to.equal(201)
+    expect(body).to.equal('GHI')
+
+    scope.done()
+  })
 })

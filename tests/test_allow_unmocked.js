@@ -1,313 +1,254 @@
 'use strict'
 
+const { expect } = require('chai')
 const http = require('http')
-const url = require('url')
-const mikealRequest = require('request')
-const { test } = require('tap')
+const sinon = require('sinon')
 const nock = require('..')
+
 const got = require('./got_client')
+const { startHttpServer } = require('./servers')
 
-require('./cleanup_after_each')()
+require('./setup')
 
-test('with allowUnmocked, mocked request still works', async t => {
-  const scope = nock('http://example.test', { allowUnmocked: true })
-    .post('/')
-    .reply(200, '99problems')
+describe('allowUnmocked option', () => {
+  it('with allowUnmocked, mocked request still works', async () => {
+    const scope = nock('http://example.test', { allowUnmocked: true })
+      .post('/')
+      .reply(200, '99problems')
 
-  const { body, statusCode } = await got.post('http://example.test/')
-  t.equal(statusCode, 200)
-  t.equal(body, '99problems')
+    const { body, statusCode } = await got.post('http://example.test/')
+    expect(statusCode).to.equal(200)
+    expect(body).to.equal('99problems')
 
-  scope.done()
-})
-
-test('allow unmocked works after one interceptor is removed', async t => {
-  const server = http.createServer((request, response) => {
-    response.write('live')
-    response.end()
-  })
-  t.once('end', () => server.close())
-
-  await new Promise(resolve => server.listen(resolve))
-
-  const url = `http://localhost:${server.address().port}`
-
-  nock(url, { allowUnmocked: true })
-    .get('/')
-    .reply(200, 'Mocked')
-
-  t.equal((await got(url)).body, 'Mocked')
-  t.equal((await got(url)).body, 'live')
-})
-
-test('allow unmocked option works', t => {
-  t.plan(7)
-
-  const server = http.createServer((request, response) => {
-    t.pass('server received a request')
-
-    switch (url.parse(request.url).pathname) {
-      case '/':
-        response.writeHead(200)
-        response.write('server served a response')
-        break
-      case '/not/available':
-        response.writeHead(404)
-        break
-      case '/abc':
-        response.writeHead(200)
-        response.write('server served a response')
-        break
-    }
-
-    response.end()
+    scope.done()
   })
 
-  server.listen(() => {
-    const scope = nock(`http://localhost:${server.address().port}`, {
-      allowUnmocked: true,
+  it('allow unmocked works after one interceptor is removed', async () => {
+    const { origin } = await startHttpServer((request, response) => {
+      response.write('live')
+      response.end()
     })
+
+    nock(origin, { allowUnmocked: true }).get('/').reply(200, 'Mocked')
+
+    expect((await got(origin)).body).to.equal('Mocked')
+    expect((await got(origin)).body).to.equal('live')
+  })
+
+  it('allow unmocked option allows traffic to server', async () => {
+    const { origin } = await startHttpServer((request, response) => {
+      switch (request.url) {
+        case '/':
+          response.writeHead(200)
+          response.write('server served a response')
+          break
+        case '/not/available':
+          response.writeHead(404)
+          break
+        case '/abc':
+          response.writeHead(200)
+          response.write('server served a response')
+          break
+      }
+
+      response.end()
+    })
+
+    const scope = nock(origin, { allowUnmocked: true })
       .get('/abc')
       .reply(304, 'served from our mock')
       .get('/wont/get/here')
       .reply(304, 'served from our mock')
+    const client = got.extend({ prefixUrl: origin, throwHttpErrors: false })
 
-    function secondIsDone() {
-      t.ok(!scope.isDone())
+    const response1 = await client('abc')
+    expect(response1.statusCode).to.equal(304)
+    expect(response1.body).to.equal('served from our mock')
+    expect(scope.isDone()).to.equal(false)
 
-      http
-        .request(
-          {
-            host: 'localhost',
-            path: '/',
-            port: server.address().port,
-          },
-          response => {
-            response.destroy()
+    const response2 = await client('not/available')
+    expect(response2.statusCode).to.equal(404)
+    expect(scope.isDone()).to.equal(false)
 
-            t.is(response.statusCode, 200, 'Do not intercept /')
+    const response3 = await client('')
+    expect(response3.statusCode).to.equal(200)
+    expect(response3.body).to.equal('server served a response')
+    expect(scope.isDone()).to.equal(false)
+  })
 
-            server.close(t.end)
-          }
-        )
-        .end()
-    }
+  it('allow unmocked post with json data', async () => {
+    const { origin } = await startHttpServer((request, response) => {
+      response.writeHead(200)
+      response.write('{"message":"server response"}')
+      response.end()
+    })
 
-    function firstIsDone() {
-      t.ok(!scope.isDone())
+    nock(origin, { allowUnmocked: true })
+      .get('/not/accessed')
+      .reply(200, '{"message":"mocked response"}')
 
-      http
-        .request(
-          {
-            host: 'localhost',
-            path: '/not/available',
-            port: server.address().port,
-          },
-          response => {
-            t.assert(
-              response.statusCode === 404,
-              'Server says it does not exist'
-            )
+    const { body, statusCode } = await got.post(origin, {
+      json: { some: 'data' },
+      responseType: 'json',
+    })
+    expect(statusCode).to.equal(200)
+    expect(body).to.deep.equal({ message: 'server response' })
+  })
 
-            response.on('data', function() {})
-            response.on('end', secondIsDone)
-          }
-        )
-        .end()
-    }
+  it('allow unmocked passthrough with mismatched bodies', async () => {
+    const { origin } = await startHttpServer((request, response) => {
+      response.writeHead(200)
+      response.write('{"message":"server response"}')
+      response.end()
+    })
 
-    const request = http.request(
-      {
-        host: 'localhost',
-        path: '/abc',
-        port: server.address().port,
-      },
-      response => {
-        t.is(response.statusCode, 304, 'Intercept /abc')
+    nock(origin, { allowUnmocked: true })
+      .post('/post', { some: 'other data' })
+      .reply(404, '{"message":"server response"}')
 
-        response.on('end', firstIsDone)
-        // Streams start in 'paused' mode and must be started.
-        // See https://nodejs.org/api/stream.html#stream_class_stream_readable
-        response.resume()
-      }
+    const { body, statusCode } = await got.post(`${origin}/post`, {
+      json: { some: 'data' },
+      responseType: 'json',
+    })
+    expect(statusCode).to.equal(200)
+    expect(body).to.deep.equal({ message: 'server response' })
+  })
+
+  it('match path using regexp with allowUnmocked', async () => {
+    const scope = nock('http://example.test', { allowUnmocked: true })
+      .get(/regex$/)
+      .reply(200, 'Match regex')
+
+    const { body, statusCode } = await got(
+      'http://example.test/resources/regex'
+    )
+    expect(statusCode).to.equal(200)
+    expect(body).to.equal('Match regex')
+
+    scope.done()
+  })
+
+  // https://github.com/nock/nock/issues/1076
+  it('match hostname using regexp with allowUnmocked', async () => {
+    const scope = nock(/localhost/, { allowUnmocked: true })
+      .get('/no/regex/here')
+      .reply(200, 'Match regex')
+
+    const { body, statusCode } = await got(
+      'http://localhost:3000/no/regex/here'
+    )
+    expect(statusCode).to.equal(200)
+    expect(body).to.equal('Match regex')
+
+    scope.done()
+  })
+
+  // https://github.com/nock/nock/issues/1867
+  it('match path using callback with allowUnmocked', async () => {
+    const scope = nock('http://example.test', { allowUnmocked: true })
+      .get(uri => uri.endsWith('bar'))
+      .reply()
+
+    const { statusCode } = await got('http://example.test/foo/bar')
+    expect(statusCode).to.equal(200)
+
+    scope.done()
+  })
+
+  // https://github.com/nock/nock/issues/835
+  it('match multiple paths to domain using regexp with allowUnmocked', async () => {
+    const { origin } = await startHttpServer((request, response) => {
+      response.write('live')
+      response.end()
+    })
+
+    const scope1 = nock(/localhost/, { allowUnmocked: true })
+      .get(/alpha/)
+      .reply(200, 'this is alpha')
+
+    const scope2 = nock(/localhost/, { allowUnmocked: true })
+      .get(/bravo/)
+      .reply(200, 'bravo, bravo!')
+
+    expect((await got(origin)).body).to.equal('live')
+    expect((await got(`${origin}/alphalicious`)).body).to.equal('this is alpha')
+    expect((await got(`${origin}/bravo-company`)).body).to.equal(
+      'bravo, bravo!'
     )
 
-    request.on('error', t.error)
-    request.end()
-  })
-})
-
-test('allow unmocked post with json data', t => {
-  t.plan(3)
-  t.once('end', function() {
-    server.close()
+    scope1.done()
+    scope2.done()
   })
 
-  const server = http.createServer((request, response) => {
-    t.pass('server received a request')
-    response.writeHead(200)
-    response.end()
-  })
+  it('match domain and path with literal query params and allowUnmocked', async () => {
+    const scope = nock('http://example.test', { allowUnmocked: true })
+      .get('/foo?bar=baz')
+      .reply()
 
-  server.listen(() => {
-    nock(`http://localhost:${server.address().port}`, { allowUnmocked: true })
-      .get('/')
-      .reply(200, 'Hey!')
+    const { statusCode } = await got('http://example.test/foo?bar=baz')
 
-    const options = {
-      method: 'POST',
-      uri: `http://localhost:${server.address().port}`,
-      json: { some: 'data' },
-    }
-
-    mikealRequest(options, function(err, resp) {
-      t.error(err)
-      t.equal(200, resp.statusCode)
-      t.end()
-    })
-  })
-})
-
-test('allow unmocked passthrough with mismatched bodies', t => {
-  t.plan(3)
-  t.once('end', function() {
-    server.close()
-  })
-
-  const server = http.createServer((request, response) => {
-    t.pass('server received a request')
-    response.writeHead(200)
-    response.end()
-  })
-
-  server.listen(() => {
-    nock(`http://localhost:${server.address().port}`, { allowUnmocked: true })
-      .post('/post', { some: 'other data' })
-      .reply(404, 'Hey!')
-
-    const options = {
-      method: 'POST',
-      uri: `http://localhost:${server.address().port}/post`,
-      json: { some: 'data' },
-    }
-
-    mikealRequest(options, function(err, resp) {
-      t.error(err)
-      t.equal(200, resp.statusCode)
-      t.end()
-    })
-  })
-})
-
-test('match path using regexp with allowUnmocked', t => {
-  nock('http://example.test', { allowUnmocked: true })
-    .get(/regex$/)
-    .reply(200, 'Match regex')
-
-  mikealRequest.get('http://example.test/resources/regex', function(
-    err,
-    res,
-    body
-  ) {
-    t.type(err, 'null')
-    t.equal(res.statusCode, 200)
-    t.equal(body, 'Match regex')
-    t.end()
-  })
-})
-
-test('match hostname using regexp with allowUnmocked (issue-1076)', t => {
-  nock(/localhost/, { allowUnmocked: true })
-    .get('/no/regex/here')
-    .reply(200, 'Match regex')
-
-  mikealRequest.get('http://localhost:3000/no/regex/here', function(
-    err,
-    res,
-    body
-  ) {
-    t.type(err, 'null')
-    t.equal(res.statusCode, 200)
-    t.equal(body, 'Match regex')
-    t.end()
-  })
-})
-
-// https://github.com/nock/nock/issues/835
-test('match multiple paths to domain using regexp with allowUnmocked', async t => {
-  const server = http.createServer((request, response) => {
-    response.write('live')
-    response.end()
-  })
-  t.once('end', () => server.close())
-  await new Promise(resolve => server.listen(resolve))
-  const url = `http://localhost:${server.address().port}`
-
-  const scope1 = nock(/localhost/, { allowUnmocked: true })
-    .get(/alpha/)
-    .reply(200, 'this is alpha')
-
-  const scope2 = nock(/localhost/, { allowUnmocked: true })
-    .get(/bravo/)
-    .reply(200, 'bravo, bravo!')
-
-  t.equal((await got(`${url}`)).body, 'live')
-  t.equal((await got(`${url}/alphalicious`)).body, 'this is alpha')
-  t.equal((await got(`${url}/bravo-company`)).body, 'bravo, bravo!')
-
-  scope1.done()
-  scope2.done()
-})
-
-test('match domain and path with literal query params and allowUnmocked', async t => {
-  const scope = nock('http://example.test', { allowUnmocked: true })
-    .get('/foo?bar=baz')
-    .reply()
-
-  const { statusCode } = await got('http://example.test/foo?bar=baz')
-
-  t.is(statusCode, 200)
-  scope.done()
-})
-
-test('match domain and path using regexp with query params and allowUnmocked', t => {
-  const imgResponse = 'Matched Images Page'
-  const opts = { allowUnmocked: true }
-
-  const scope = nock(/example/, opts)
-    .get(/imghp\?hl=en/)
-    .reply(200, imgResponse)
-
-  mikealRequest.get('http://example.test/imghp?hl=en', function(
-    err,
-    res,
-    body
-  ) {
+    expect(statusCode).to.equal(200)
     scope.done()
-    t.type(err, 'null')
-    t.equal(res.statusCode, 200)
-    t.equal(body, imgResponse)
-    t.end()
   })
-})
 
-// https://github.com/nock/nock/issues/490
-test('match when query is specified with allowUnmocked', async t => {
-  const server = http.createServer((request, response) => {
-    response.write('live')
-    response.end()
+  it('match domain and path using regexp with query params and allowUnmocked', async () => {
+    const imgResponse = 'Matched Images Page'
+
+    const scope = nock(/example/, { allowUnmocked: true })
+      .get(/imghp\?hl=en/)
+      .reply(200, imgResponse)
+
+    const { body, statusCode } = await got('http://example.test/imghp?hl=en')
+    expect(statusCode).to.equal(200)
+    expect(body).to.equal(imgResponse)
+
+    scope.done()
   })
-  t.once('end', () => server.close())
-  await new Promise(resolve => server.listen(resolve))
-  const url = `http://localhost:${server.address().port}`
 
-  const scope = nock(url, { allowUnmocked: true })
-    .get('/search')
-    .query({ q: 'cat pictures' })
-    .reply(200, '😻')
+  // https://github.com/nock/nock/issues/490
+  it('match when query is specified with allowUnmocked', async () => {
+    const { origin } = await startHttpServer((request, response) => {
+      response.write('live')
+      response.end()
+    })
 
-  t.equal((await got(url)).body, 'live')
-  t.equal((await got(`${url}/search?q=cat%20pictures`)).body, '😻')
+    const scope = nock(origin, { allowUnmocked: true })
+      .get('/search')
+      .query({ q: 'cat pictures' })
+      .reply(200, '😻')
 
-  scope.done()
+    expect((await got(origin)).body).to.equal('live')
+    expect((await got(`${origin}/search?q=cat%20pictures`)).body).to.equal('😻')
+
+    scope.done()
+  })
+
+  // https://github.com/nock/nock/issues/1832
+  it('should only emit "finish" once even if an unmocked request is created after playback as started', async () => {
+    const { origin, port } = await startHttpServer((request, response) =>
+      response.end()
+    )
+
+    const scope = nock(origin, { allowUnmocked: true }).post('/', 'foo').reply()
+
+    const req = http.request({
+      host: 'localhost',
+      port,
+      method: 'POST',
+      path: '/',
+    })
+
+    const finishSpy = sinon.spy()
+    req.on('finish', finishSpy)
+
+    return new Promise(resolve => {
+      req.on('response', () => {
+        expect(finishSpy).to.have.been.calledOnce()
+        expect(scope.isDone()).to.be.false()
+        resolve()
+      })
+      req.write('bar') // a mismatched body causes a late unmocked request
+      req.end()
+    })
+  })
 })

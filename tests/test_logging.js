@@ -2,51 +2,62 @@
 
 const debug = require('debug')
 const sinon = require('sinon')
-const { test } = require('tap')
 const { expect } = require('chai')
 const nock = require('..')
 const got = require('./got_client')
 
-require('./cleanup_after_each')()
 require('./setup')
 
-test('match debugging works', async t => {
-  const logFn = sinon.stub(debug, 'log')
-  debug.enable('nock.interceptor')
-  t.once('end', () => {
-    debug.disable('nock.interceptor')
+describe('Logging using the `debug` package', () => {
+  let logFn
+  beforeEach(() => {
+    logFn = sinon.stub(debug, 'log')
+    debug.enable('nock*')
+  })
+  afterEach(() => {
+    debug.disable('nock*')
   })
 
-  nock('http://example.test')
-    .post('/deep/link')
-    .reply(200, 'Hello World!')
+  it('match debugging works', async () => {
+    nock('http://example.test').post('/deep/link').reply(200, 'Hello World!')
 
-  const exampleBody = 'Hello yourself!'
-  await got.post('http://example.test/deep/link', { body: exampleBody })
+    const exampleBody = 'Hello yourself!'
+    await got.post('http://example.test/deep/link', { body: exampleBody })
 
-  expect(logFn).to.have.been.calledWithExactly(
-    sinon.match.string,
-    // This is a JSON blob which contains, among other things the complete
-    // request URL.
-    sinon.match('"href":"http://example.test/deep/link"'),
-    // This is the JSON-stringified body.
-    `"${exampleBody}"`
-  )
-})
+    const isMocha = process.argv.some(arg => arg.endsWith('mocha'))
+    // TODO For some reason this is getting slightly different arguments in Tap
+    // vs Mocha. Remove this conditional when Tap is removed.
+    if (isMocha) {
+      // the log function will have been a few dozen times, there are a few specific to matching we want to validate:
 
-test('should log matching', async t => {
-  const logFn = sinon.spy()
+      // the log when an interceptor is chosen
+      expect(logFn).to.have.been.calledWith(
+        sinon.match('matched base path (1 interceptor)')
+      )
 
-  const scope = nock('http://example.test')
-    .get('/')
-    .reply(200, 'Hello, World!')
-    .log(logFn)
+      // the log of the Interceptor match
+      expect(logFn).to.have.been.calledWith(
+        // debug namespace for the scope that includes the host
+        sinon.match('nock.scope:example.test'),
+        // This is a JSON blob which contains, among other things the complete
+        // request URL.
+        sinon.match('"href":"http://example.test/deep/link"'),
+        // This is the JSON-stringified body.
+        `"${exampleBody}"`
+      )
 
-  await got('http://example.test/')
+      expect(logFn).to.have.been.calledWith(
+        sinon.match('query matching skipped')
+      )
 
-  expect(logFn).to.have.been.calledOnceWithExactly(
-    'matching http://example.test:80/ to GET http://example.test:80/: true'
-  )
-
-  scope.done()
+      expect(logFn).to.have.been.calledWith(
+        sinon.match(
+          'matching http://example.test:80/deep/link to POST http://example.test:80/deep/link: true'
+        )
+      )
+      expect(logFn).to.have.been.calledWith(
+        sinon.match('interceptor identified, starting mocking')
+      )
+    }
+  })
 })
